@@ -1,0 +1,24 @@
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: default
+  namespace: velero
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade,post-rollback
+    "helm.sh/hook-delete-policy": before-hook-creation
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.2
+spec:
+  provider: community.openstack.org/openstack
+  accessMode: ReadWrite
+  objectStorage:
+    # OBS Name
+    bucket: "sh-meta-int-002-bak"
+  config:
+    # OBS Region
+    region: "KR2"
+    # swift:{OBS Name}:/restric
+    resticRepoPrefix: "swift:sh-meta-int-002-bak:/restic"

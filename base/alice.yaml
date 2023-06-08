@@ -1,0 +1,9 @@
+kind: user
+version: v2
+metadata:
+  name: alice3
+spec:
+  roles: ['dev2']
+  traits:
+    logins: ['admin']
+    kubernetes_groups: ['edit']

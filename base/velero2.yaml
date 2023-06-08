@@ -1,0 +1,373 @@
+---
+# Source: velero/templates/serviceaccount-server.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: velero-server
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+---
+# Source: velero/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+type: Opaque
+data:
+---
+# Source: velero/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: velero-server
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+subjects:
+  - kind: ServiceAccount
+    namespace: velero
+    name: velero-server
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: velero/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: velero-server
+  namespace: velero
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+rules:
+- apiGroups:
+    - "*"
+  resources:
+    - "*"
+  verbs:
+    - "*"
+---
+# Source: velero/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: velero-server
+  namespace: velero
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+subjects:
+  - kind: ServiceAccount
+    namespace: velero
+    name: velero-server
+roleRef:
+  kind: Role
+  name: velero-server
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: velero/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-monitoring
+      port: 8085
+      targetPort: http-monitoring
+  selector:
+    name: velero
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+---
+# Source: velero/templates/restic-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: restic
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+spec:
+  selector:
+    matchLabels:
+      name: restic
+  template:
+    metadata:
+      labels:
+        name: restic
+        app.kubernetes.io/name: velero
+        app.kubernetes.io/instance: velero
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: velero-2.32.3
+    spec:
+      serviceAccountName: velero-server
+      securityContext:
+        runAsUser: 0
+      terminationGracePeriodSeconds: 3600
+      volumes:
+        - name: cloud-credentials
+          secret:
+            secretName: velero
+        - name: host-pods
+          hostPath:
+            path: /var/lib/kubelet/pods
+        - name: scratch
+          emptyDir: {}
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: velero-sec
+      containers:
+        - name: restic
+          image: private-86266707-kr2-registry.container.nhncloud.com/temp/velero:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /velero
+          args:
+            - restic
+            - server
+          volumeMounts:
+            - name: cloud-credentials
+              mountPath: /credentials
+            - name: host-pods
+              mountPath: /host_pods
+              mountPropagation: HostToContainer
+            - name: scratch
+              mountPath: /scratch
+          env:
+            - name: VELERO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: VELERO_SCRATCH_DIR
+              value: /scratch
+            - name: OS_AUTH_URL
+              value: "https://api-identity.infrastructure.cloud.toast.com/v2.0"
+            - name: OS_DOMAIN_ID
+              value: "default"
+            - name: OS_PASSWORD
+              value: "abc1234"
+            - name: OS_REGION_NAME
+              value: "KR2"
+            - name: OS_TENANT_ID
+              value: "3e2ec4723a204af4b2e0d908d82871bd"
+            - name: OS_USERNAME
+              value: "byungsub.kwon@nhn.com"
+          securityContext:
+            privileged: false
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+---
+# Source: velero/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+    component: velero
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: velero
+      app.kubernetes.io/name: velero
+  template:
+    metadata:
+      labels:
+        name: velero
+        app.kubernetes.io/name: velero
+        app.kubernetes.io/instance: velero
+        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: velero-2.32.3
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8085"
+        prometheus.io/scrape: "true"
+    spec:
+      restartPolicy: Always
+      serviceAccountName: velero-server
+      terminationGracePeriodSeconds: 3600
+      imagePullSecrets:
+      - name: velero-sec
+      containers:
+        - name: velero
+          image: private-86266707-kr2-registry.container.nhncloud.com/temp/velero:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-monitoring
+              containerPort: 8085
+          command:
+            - /velero
+          args:
+            - server
+            - --default-volumes-to-restic
+            - --default-restic-prune-frequency=0h1m0s
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 500m
+              memory: 128Mi
+          volumeMounts:
+            - name: plugins
+              mountPath: /plugins
+            - name: cloud-credentials
+              mountPath: /credentials
+            - name: scratch
+              mountPath: /scratch
+          env:
+            - name: VELERO_SCRATCH_DIR
+              value: /scratch
+            - name: VELERO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: LD_LIBRARY_PATH
+              value: /plugins
+            - name: OS_AUTH_URL
+              value: "https://api-identity.infrastructure.cloud.toast.com/v2.0"
+            - name: OS_DOMAIN_ID
+              value: "default"
+            - name: OS_PASSWORD
+              value: "abc1234"
+            - name: OS_REGION_NAME
+              value: "KR2"
+            - name: OS_TENANT_ID
+              value: "3e2ec4723a204af4b2e0d908d82871bd"
+            - name: OS_USERNAME
+              value: "byungsub.kwon@nhn.com"
+      dnsPolicy: ClusterFirst
+      # Pod내 NHN API DNS 설정 #########
+      hostAliases:
+      - hostnames:
+        - api-identity.infrastructure.cloud.toast.com
+        ip: 172.16.1.56
+      - hostnames:
+        - kr2-api-storage.cloud.toast.com
+        ip: 172.16.1.84
+      - hostnames:
+        - private-86266707-kr2-registry.container.nhncloud.com
+        ip: 172.16.1.12
+      ###############################
+      initContainers:
+        - image: private-86266707-kr2-registry.container.nhncloud.com/temp/velero-openstack:latest
+          name: velero-plugin-for-openstack
+          volumeMounts:
+          - mountPath: /target
+            name: plugins
+      volumes:
+        - name: cloud-credentials
+          secret:
+            secretName: velero
+        - name: plugins
+          emptyDir: {}
+        - name: scratch
+          emptyDir: {}
+---
+# Source: velero/templates/upgrade-crds.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: velero-upgrade-crds
+  namespace: velero
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade,post-rollback
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/instance: velero
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: velero-2.32.3
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: velero-upgrade-crds
+    spec:
+      imagePullSecrets:
+      - name: velero-sec
+      serviceAccountName: velero-server
+      initContainers:
+        - name: kubectl
+          image: private-86266707-kr2-registry.container.nhncloud.com/temp/bitnami:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+          args:
+            - -c
+            - cp `which sh` /tmp && cp `which kubectl` /tmp
+          volumeMounts:
+            - mountPath: /tmp
+              name: crds
+      containers:
+        - name: velero
+          image: private-86266707-kr2-registry.container.nhncloud.com/temp/velero:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /tmp/sh
+          args:
+            - -c
+            - /velero install --crds-only --dry-run -o yaml | /tmp/kubectl apply -f -
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 500m
+              memory: 128Mi
+          volumeMounts:
+            - mountPath: /tmp
+              name: crds
+      volumes:
+        - name: crds
+          emptyDir: {}
+      restartPolicy: OnFailure
