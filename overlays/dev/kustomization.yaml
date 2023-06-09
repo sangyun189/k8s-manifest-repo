@@ -3,7 +3,7 @@ kind: Kustomization
 images:
 - name: 891310896318.dkr.ecr.ap-northeast-2.amazonaws.com/demo-frontend
   newName: 891310896318.dkr.ecr.ap-northeast-2.amazonaws.com/demo-frontend
-  newTag: e08ba9f2
+  newTag: e0fc45ea
 resources:
 - ../../base
 patchesStrategicMerge:
